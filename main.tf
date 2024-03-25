@@ -46,6 +46,62 @@ resource "aws_instance" "blog" {
   }
 }
 
+module "alb" {
+  source = "terraform-aws-modules/alb/aws"
+
+  name    = "blog-alb"
+  vpc_id  = module.blog_vpc.vpc_id
+  subnets = module.blog_vpc.public_subnets
+
+  # Security Group
+  security_group_ingress_rules = {
+    all_http = {
+      from_port   = 80
+      to_port     = 80
+      ip_protocol = "tcp"
+      description = "HTTP web traffic"
+      cidr_ipv4   = "0.0.0.0/0"
+    }
+  }
+  security_group_egress_rules = {
+    all = {
+      ip_protocol = "-1"
+      cidr_ipv4   = "10.0.0.0/16"
+    }
+  }
+
+  access_logs = {
+    bucket = "my-alb-logs"
+  }
+
+  listeners = {
+    ex-http-https-redirect = {
+      port                = 80
+      protocol            = "HTTP"
+      target_group_index  = 0
+    }
+  }
+
+  target_groups = {
+    blog-instance = {
+      name_prefix      = " blog"
+      protocol         = "HTTP"
+      port             = 80
+      target_type      = "instance"
+      targets          = {
+        my_target      = {
+          target_id    = aws_instance.blog.id
+          port         = 80
+        }
+      }
+    }
+  }
+
+  tags = {
+    Environment = "Dev"
+  }
+}
+
 module "blog_sg" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "5.1.2"
