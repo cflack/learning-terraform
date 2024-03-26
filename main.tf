@@ -14,10 +14,6 @@ data "aws_ami" "app_ami" {
   owners = ["979382823631"] # Bitnami
 }
 
-data "aws_vpc" "default" {
-  default = "true"
-}
-
 module "blog_vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
@@ -46,59 +42,37 @@ resource "aws_instance" "blog" {
   }
 }
 
-module "alb" {
-  source = "terraform-aws-modules/alb/aws"
+module "blog_alb" {
+  source  = "terraform-aws-modules/alb/aws"
+  version = "~> 6.0"
 
-  name    = "blog-alb"
-  vpc_id  = module.blog_vpc.vpc_id
-  subnets = module.blog_vpc.public_subnets
+  name = "blog-alb"
 
-  # Security Group
-  security_group_ingress_rules = {
-    all_http = {
-      from_port   = 80
-      to_port     = 80
-      ip_protocol = "tcp"
-      description = "HTTP web traffic"
-      cidr_ipv4   = "0.0.0.0/0"
-    }
-  }
-  security_group_egress_rules = {
-    all = {
-      ip_protocol = "-1"
-      cidr_ipv4   = "10.0.0.0/16"
-    }
-  }
+  load_balancer_type = "application"
 
-  access_logs = {
-    bucket = "my-alb-logs"
-  }
+  vpc_id             = module.blog_vpc.vpc_id
+  subnets            = module.blog_vpc.public_subnets
+  security_groups    = [module.blog_sg.security_group_id]
 
-  listeners = {
-    ex-http-https-redirect = {
-      port                = 80
-      protocol            = "HTTP"
-      target_group_index  = 0
-    }
-  }
-
-  target_groups = {
-    blog-instance = {
-      name_prefix      = "blog"
-      protocol         = "HTTP"
-      port             = 80
+  target_groups = [
+    {
+      name_prefix      = "blog-"
+      backend_protocol = "HTTP"
+      backend_port     = 80
       target_type      = "instance"
-      targets          = {
-        my_target      = {
-          target_id    = aws_instance.blog.id
-          port         = 80
-        }
-      }
     }
-  }
+  ]
+
+  http_tcp_listeners = [
+    {
+      port               = 80
+      protocol           = "HTTP"
+      target_group_index = 0
+    }
+  ]
 
   tags = {
-    Environment = "Dev"
+    Environment = "dev"
   }
 }
 
